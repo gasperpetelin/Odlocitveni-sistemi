@@ -148,3 +148,37 @@ class ItemBasedPredictor:
         var1 = np.sqrt(np.sum(u1v * u1v))
         var2 = np.sqrt(np.sum(u2v * u2v))
         return cor / ((var1 * var2) + self.K)
+
+
+class SlopeOnePredictor:
+    def fit(self, data):
+        self.data = data
+
+    def predict(self, number):
+        (usersNum, moviesNum) = np.shape(self.data)
+
+        retscores = []
+        for movieId in range(0, moviesNum):
+            scores = []
+            weight = []
+            for m in range(0, moviesNum):
+                if m != movieId:
+                    s, w = self.dev(m, movieId)
+                    scores.append(s)
+                    weight.append(w)
+                else:
+                    scores.append(0)
+                    weight.append(0)
+
+            pred = np.sum((self.data[number] - np.array(scores)) * np.array(weight)) / np.sum(np.array(weight))
+            retscores.append(pred)
+        return np.array(retscores)
+
+    def dev(self, m1, m2):
+        v1 = self.data[:, m1]
+        v2 = self.data[:, m2]
+
+        selector = (v2 > 0) & (v1 > 0)
+        v1 = v1[selector]
+        v2 = v2[selector]
+        return (np.sum(v1 - v2) / len(v1), len(v1))
