@@ -147,4 +147,6 @@ ENV/
 # Rope project settings
 .ropeproject
 
+runJupyter.bat
+
 # End of https://www.gitignore.io/api/pycharm,python
