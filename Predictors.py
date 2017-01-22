@@ -1,4 +1,5 @@
 import numpy as np
+import NMF as nmf
 
 class RandomPredictor:
     def __init__(self, minVal, maxVal):
@@ -42,7 +43,11 @@ class DeviationPredictor:
         self.data = data
 
     def predict(self, number):
-        return np.ma.MaskedArray(self.data, self.data<1).std(axis=0)
+        v = np.ma.MaskedArray(self.data, self.data<1).std(axis=0)
+        for i in range(0, len(v)):
+            if str(v[i]) == "--":
+                v[i] = -1
+        return v
 
 
 class UserBasedPredictor:
@@ -53,13 +58,15 @@ class UserBasedPredictor:
     def fit(self, data):
         self.data = data
         self.avgM = []
-        self.avgData = np.copy(data).astype(float)
+        self.avgData = np.copy(data)
         (usersNum, moviesNum) = np.shape(self.data)
         for movie in range(0, moviesNum):
             vec = self.data[:, movie]
             vec = vec[vec > 0]
             self.avgM.append(np.mean(vec))
             self.avgData[:, movie] = self.avgData[:, movie] - np.mean(vec)
+			
+		
         self.avgData[self.data == 0] = 0
 
     def predict(self, number):
@@ -81,7 +88,11 @@ class UserBasedPredictor:
 
         moviesls = []
         for m in range(0, moviesNum):
-            moviesls.append(self.avgM[m] + np.sum(self.avgData[:, m] * ls) / np.sum(ls))
+            v = self.avgM[m] + np.sum(self.avgData[:, m] * ls) / np.sum(ls)
+            if np.isnan(v):
+                moviesls.append(0)
+            else:
+                moviesls.append(v)
         return np.array(moviesls)
 
     def similarity(self, u1, u2):
@@ -103,12 +114,15 @@ class ItemBasedPredictor:
 
     def fit(self, data):
         self.data = data
-        self.avgData = np.copy(data).astype(float)
+        self.avgData = np.copy(data)
         (usersNum, moviesNum) = np.shape(self.data)
         for movie in range(0, moviesNum):
             vec = self.data[:, movie]
             vec = vec[vec > 0]
-            self.avgData[:, movie] = self.avgData[:, movie] - np.mean(vec)
+            if len(vec)==0:
+                self.avgData[:, movie] = 0
+            else:
+                self.avgData[:, movie] = self.avgData[:, movie] - np.mean(vec)
         self.avgData[self.data == 0] = 0
 
     def predict(self, number):
@@ -133,8 +147,11 @@ class ItemBasedPredictor:
                 kth.sort()
                 kth = kth[-self.K]
                 ls[ls < kth] = 0
-
-            rat.append((np.sum(self.avgData[number] * ls) / np.sum(ls)) + usermean)
+            v = (np.sum(self.avgData[number] * ls) / (np.sum(ls)) + usermean)
+            if np.isnan(v):
+                rat.append(0)
+            else:
+                rat.append(v)
         return np.array(rat)
 
     def similarity(self, u1, u2):
@@ -164,6 +181,8 @@ class SlopeOnePredictor:
             for m in range(0, moviesNum):
                 if m != movieId:
                     s, w = self.dev(m, movieId)
+                    if s == None:
+                        s,w = 0,0
                     scores.append(s)
                     weight.append(w)
                 else:
@@ -171,7 +190,10 @@ class SlopeOnePredictor:
                     weight.append(0)
 
             pred = np.sum((self.data[number] - np.array(scores)) * np.array(weight)) / np.sum(np.array(weight))
-            retscores.append(pred)
+            if np.isnan(pred):
+                retscores.append(0)
+            else:
+                retscores.append(pred)
         return np.array(retscores)
 
     def dev(self, m1, m2):
@@ -179,6 +201,26 @@ class SlopeOnePredictor:
         v2 = self.data[:, m2]
 
         selector = (v2 > 0) & (v1 > 0)
+
         v1 = v1[selector]
         v2 = v2[selector]
+
+        if len(v1)==0:
+            return (0, 0)
         return (np.sum(v1 - v2) / len(v1), len(v1))
+
+class NMFPredictor:
+
+    def __init__(self, rank=10, max_iter=100, eta=0.01):
+        self.rank = rank
+        self.max_iter = max_iter
+        self.eta = eta
+
+    def fit(self, data):
+        self.data = data
+        self.predictor = nmf.NMF(self.rank, self.max_iter, self.eta)
+        self.predictor.fit(self.data)
+        self.matrix = self.predictor.predict_all()
+
+    def predict(self, number):
+        return self.matrix[number,:]
